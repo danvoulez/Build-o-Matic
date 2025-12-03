@@ -1,0 +1,15 @@
+{
+  "AWSEBDockerrunVersion": "1",
+  "Image": {
+    "Name": "ghcr.io/owner/repo/buildomatic:latest",
+    "Update": "true"
+  },
+  "Ports": [
+    { "ContainerPort": "4000" }
+  ],
+  "Environment": [
+    { "Name": "NODE_ENV", "Value": "production" },
+    { "Name": "DATABASE_URL", "Value": "postgresql://user:pass@host:5432/db" },
+    { "Name": "SENTRY_DSN", "Value": "" }
+  ]
+}

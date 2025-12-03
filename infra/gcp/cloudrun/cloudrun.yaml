@@ -1,0 +1,23 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: bom-tool
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+        - image: us-docker.pkg.dev/PROJECT/REPO/buildomatic:latest
+          ports:
+            - containerPort: 4000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              value: postgresql://user:pass@host:5432/db
+            - name: SENTRY_DSN
+              value: ""
+      containerConcurrency: 80
+  traffic:
+    - percent: 100
+      latestRevision: true
