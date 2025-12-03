@@ -20,48 +20,9 @@ import { checkUBLAvailability } from '../generator/ubl-integration';
 
 initSentry();
 
-/**
- * CORS Configuration - Dynamic Whitelist
- * Permite domínios Vercel, Netlify e localhost para desenvolvimento
- */
-const corsOptions: cors.CorsOptions = {
-  origin: (origin, callback) => {
-    // Lista de padrões permitidos
-    const allowedPatterns = [
-      /^https?:\/\/localhost(:\d+)?$/, // localhost (dev)
-      /^https?:\/\/127\.0\.0\.1(:\d+)?$/, // localhost IP
-      /^https:\/\/.*\.vercel\.app$/, // Vercel deploys
-      /^https:\/\/.*\.netlify\.app$/, // Netlify deploys
-      /^https:\/\/.*\.railway\.app$/, // Railway deploys
-      /^https:\/\/.*\.render\.com$/, // Render deploys
-    ];
-
-    // Permitir requisições sem origin (ex: Postman, mobile apps)
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-
-    // Verificar se o origin corresponde a algum padrão permitido
-    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
-
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      // Log de tentativa de acesso não autorizado
-      logger.warn('cors:blocked', { origin });
-      callback(new Error(`Origin ${origin} not allowed by CORS policy`));
-    }
-  },
-  credentials: true, // Permitir cookies e autenticação
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Subscription-Active'],
-  maxAge: 86400 // Cache preflight por 24 horas
-};
-
 const app = express();
 app.use(...sentryMiddleware());
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(helmet());
 app.use(bodyParser.json({ type: 'application/json' }));
 app.use(metricsMiddleware()); // record request metrics
