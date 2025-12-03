@@ -190,37 +190,13 @@ export const gdprTemplate: Template = {
   
   // Environment variables needed
   environmentVariables: {
-    required: [
-      'DATABASE_URL',
-      'JWT_SECRET',
-      'NODE_ENV',
-    ],
-    optional: [
-      'SMTP_HOST',
-      'SMTP_USER',
-      'SMTP_PASS',
-      'SLACK_WEBHOOK_URL',
-      'WEBHOOK_URL',
-    ],
+    required: ['UBL_ANTENNA_URL', 'REALM_ID'],
+    optional: ['UBL_API_KEY']
   },
   
   // NPM dependencies
   dependencies: {
-    backend: [
-      'express',
-      'pg',
-      'jsonwebtoken',
-      'bcrypt',
-      'zod',
-      'dotenv',
-    ],
-    frontend: [
-      'react',
-      'react-dom',
-      'react-router-dom',
-      '@tanstack/react-query',
-      'axios',
-    ],
+    frontend: ['react', 'react-dom', '@build-o-matic/ubl-client', 'react-markdown']
   },
   
   // ============================================================================

@@ -1,0 +1,15 @@
+{
+  "name": "@build-o-matic/ubl-client",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "dependencies": {},
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  }
+}

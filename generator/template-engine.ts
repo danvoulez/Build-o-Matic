@@ -133,8 +133,16 @@ export class TemplateEngine {
       throw new Error(`Template ${template.id} missing codeTemplates; required for Phase 1 generation`);
     }
     const ct = (template as any).codeTemplates;
-    if (!ct.backend || !ct.frontend || !ct.database) {
-      throw new Error(`Template ${template.id} codeTemplates must include backend, frontend, and database`);
+    // UBL Integration: Templates now use frontend, intents, agreements (not backend/database)
+    if (!ct.frontend) {
+      throw new Error(`Template ${template.id} codeTemplates must include frontend`);
+    }
+    // intents and agreements are optional but recommended
+    if (!ct.intents) {
+      console.warn(`Template ${template.id} missing intents template (recommended)`);
+    }
+    if (!ct.agreements) {
+      console.warn(`Template ${template.id} missing agreements template (recommended)`);
     }
   }
 }

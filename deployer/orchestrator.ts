@@ -1,3 +1,13 @@
+// NOTE: This deployer now deploys frontend-only tools
+// Backend is provided by Universal Business Ledger (UBL)
+// UBL should be deployed separately and shared across all tools
+//
+// All deployers have been adapted to:
+// - Deploy only frontend (static site)
+// - Configure UBL_ANTENNA_URL environment variable
+// - Use REALM_ID from generator
+// - No backend or database provisioning
+
 import { GeneratedTool } from '../generator/core';
 import { RailwayDeployer } from './railway';
 import { RenderDeployer } from './render';

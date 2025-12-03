@@ -18,18 +18,20 @@ export class RailwayDeployer {
   }
 
   async deploy(tool: GeneratedTool, options: DeployOptions = {}) {
+    // UBL Integration: Deploy only frontend (static site)
+    // Backend is provided by Universal Business Ledger
     const project = await this.api.createProject({
       name: options.projectName || `tool-${tool.id}`,
     });
 
-    const database = await this.api.addPostgres(project.id);
-
-    const backend = await this.api.createServiceFromPackage(project.id, `backend-${tool.id}`, tool.deployment.package!);
+    // Deploy only frontend (no backend, no database)
     const frontend = await this.api.createServiceFromPackage(project.id, `frontend-${tool.id}`, tool.deployment.package!);
 
+    // Environment variables for frontend (UBL connection)
     const envVars = {
-      DATABASE_URL: database.url,
       NODE_ENV: 'production',
+      UBL_ANTENNA_URL: process.env.UBL_ANTENNA_URL || 'http://localhost:3000',
+      REALM_ID: tool.config.environment.REALM_ID || `realm-${tool.id}`,
       ...tool.config.environment,
     };
     await this.api.setEnvironmentVariables(project.id, envVars);
@@ -39,8 +41,8 @@ export class RailwayDeployer {
     return {
       projectId: project.id,
       url: frontend.url,
-      apiUrl: backend.url,
-      database,
+      // No backend URL (using UBL)
+      // No database (using UBL event store)
       credentials: {
         admin: {
           email: 'admin@example.com',

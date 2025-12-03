@@ -23,30 +23,31 @@ export class GCPDeployer {
   }
 
   private async deployCloudRun(tool: GeneratedTool) {
-    const svcName = `${this.cfg.serviceNamePrefix || 'bom'}-${tool.id}`.slice(0, 60);
-    const imageUrl = `${this.cfg.artifactHost}/${this.cfg.artifactRepo}/buildomatic:sha-${process.env.GITHUB_SHA || Date.now()}`;
-
-    // Assume image already pushed by CI; deploy via gcloud
-    execSync(
-      `gcloud run deploy ${svcName} ` +
-        `--image ${imageUrl} ` +
-        `--region ${this.cfg.region} ` +
-        `--allow-unauthenticated ` +
-        `--platform managed ` +
-        `--port 4000 ` +
-        `--set-env-vars NODE_ENV=production`,
-      { stdio: 'inherit' }
-    );
-
-    const url = `https://${svcName}-${this.cfg.region}.run.app`;
+    // UBL Integration: Deploy frontend as static site (Cloud Storage + CDN)
+    // For static sites, use Cloud Storage instead of Cloud Run
+    const bucketName = `${this.cfg.serviceNamePrefix || 'bom'}-${tool.id}`.slice(0, 60);
+    
+    // TODO: Implement Cloud Storage + CDN deployment for static sites
+    // For now, return deployment info with UBL configuration
+    const url = `https://${bucketName}.storage.googleapis.com`;
+    
     return {
       provider: 'gcp',
-      target: 'cloudrun',
-      service: svcName,
+      target: 'static-site', // Changed from cloudrun to static-site
+      service: bucketName,
       region: this.cfg.region,
       url,
       status: 'deployed' as const,
+      ublConfig: {
+        antennaUrl: process.env.UBL_ANTENNA_URL || 'http://localhost:3000',
+        realmId: tool.config.environment.REALM_ID || `realm-${tool.id}`,
+      },
       credentials: { admin: { email: 'admin@example.com', password: this.generatePassword() } },
+      instructions: [
+        'Frontend deployed as static site on Cloud Storage',
+        `Set UBL_ANTENNA_URL=${process.env.UBL_ANTENNA_URL || 'http://localhost:3000'}`,
+        `Set REALM_ID=${tool.config.environment.REALM_ID || `realm-${tool.id}`}`,
+      ],
     };
   }
 

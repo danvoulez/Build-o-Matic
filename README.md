@@ -2,6 +2,8 @@
 
 Generate business tools in seconds from curated templates. Answer 5 questions, and Build-O-Matic produces backend, frontend, database schema, packages for deployment, and optionally deploys to your platform of choice (Railway, Render, Docker, AWS, GCP). Subscriptions are managed via Stripe; monitoring and error tracking are wired with Prometheus + Grafana and Sentry.
 
+> **📚 [Documentação Completa](./docs/README.md)** - Navegue toda a documentação organizada por categoria.
+
 Highlights:
 - Templates catalog for common business needs (GDPR Compliance, HR Onboarding, Invoice Manager, Asset Tracker, Contract Manager, Time Tracking, CRM Lite, Helpdesk, OKRs Manager, Inventory Manager, Procurement Manager, Project Planner, Knowledge Base).
 - Generator produces typed code from template `codeTemplates` using feature/integration toggles.

@@ -6,6 +6,9 @@ import { Customizer } from './customizer';
 import { Packager } from './packager';
 import { TemplateNotFoundError, ValidationError, GeneratorError } from './errors';
 import { logger } from '../server/logger';
+import { registerRealmInUBL, generateRealmId, checkUBLAvailability } from './ubl-integration';
+import { SecurityValidator } from './security/validator';
+import { globalRateLimiter } from './security/rate-limiter';
 
 export interface GenerationInput {
   templateId: string;
@@ -17,7 +20,11 @@ export interface GenerationInput {
 export interface GeneratedTool {
   id: string;
   template: string;
-  code: { backend: string; frontend: string; database: string };
+  code: { 
+      frontend: string; 
+      intents: string; 
+      agreements: string;
+    };
   config: {
     environment: Record<string, string>;
     secrets: Record<string, string>;
@@ -54,28 +61,53 @@ export class Generator {
     const startTime = Date.now();
     const emit = (p: number, m: string) => onProgress?.({ progress: p, message: m });
 
+    // SECURITY: Rate limiting
+    const rateLimitKey = input.userId || 'anonymous';
+    const rateLimitResult = globalRateLimiter.isAllowed(rateLimitKey);
+    if (!rateLimitResult.allowed) {
+      logger.warn('generate:rate-limit-exceeded', { userId: input.userId, error: rateLimitResult.error });
+      throw new GeneratorError(rateLimitResult.error || 'Rate limit exceeded');
+    }
+
+    // SECURITY: Validar template ID
+    const templateValidation = SecurityValidator.validateTemplateId(input.templateId);
+    if (!templateValidation.valid) {
+      logger.warn('generate:invalid-template-id', { templateId: input.templateId, error: templateValidation.error });
+      throw new TemplateNotFoundError(templateValidation.error || 'Invalid template ID');
+    }
+
     logger.info('generate:start', { templateId: input.templateId, userId: input.userId });
     emit(10, 'Loading template');
 
-    const template = await this.templateEngine.load(input.templateId);
+    const template = await this.templateEngine.load(templateValidation.sanitized);
     if (!template) {
       logger.warn('generate:template-not-found', { templateId: input.templateId });
       throw new TemplateNotFoundError(input.templateId);
     }
 
     emit(30, 'Validating answers');
-    this.validateAnswers(template, input.answers);
+    
+    // SECURITY: Validar e sanitizar answers
+    const answersValidation = SecurityValidator.validateAnswers(input.answers);
+    if (!answersValidation.valid) {
+      logger.warn('generate:invalid-answers', { errors: answersValidation.errors });
+      throw new ValidationError(`Invalid answers: ${answersValidation.errors.join(', ')}`);
+    }
+    
+    this.validateAnswers(template, answersValidation.sanitized);
 
     emit(50, 'Customizing code');
-    const customized = await this.customizer.apply(template as any, input.answers);
+    // Usar answers sanitizadas
+    const customized = await this.customizer.apply(template as any, answersValidation.sanitized);
 
     emit(75, 'Packaging');
     const packaged = await this.packager.package(customized, input.deployTarget);
 
     emit(95, 'Finalizing');
     const generationTime = Date.now() - startTime;
+    const toolId = this.generateId();
     const result: GeneratedTool = {
-      id: this.generateId(),
+      id: toolId,
       template: input.templateId,
       code: customized.code,
       config: customized.config,
@@ -86,6 +118,40 @@ export class Generator {
         estimatedCost: this.calculateCost(template as any, input.answers),
       },
     };
+
+    // UBL Integration: Register Realm after generation
+    emit(98, 'Registering Realm in UBL');
+    try {
+      const realmId = generateRealmId(toolId);
+      const realmRegistration = await registerRealmInUBL({
+        id: realmId,
+        name: input.answers.companyName || customized.config.settings?.companyName || 'Generated Tool',
+        agreements: customized.code.agreements,
+        metadata: {
+          toolId,
+          templateId: input.templateId,
+          generatedAt: result.metadata.generatedAt.toISOString()
+        }
+      });
+
+      if (realmRegistration.success) {
+        logger.info('generate:realm-registered', { toolId, realmId: realmRegistration.realmId });
+        // Add realm ID to config for deployment
+        result.config.environment.REALM_ID = realmRegistration.realmId;
+        // Store realm_id in result metadata for database storage
+        (result as any).realmId = realmRegistration.realmId;
+      } else {
+        logger.warn('generate:realm-registration-failed', { 
+          toolId, 
+          realmId: realmRegistration.realmId,
+          error: realmRegistration.error 
+        });
+        // Don't fail generation if realm registration fails
+      }
+    } catch (error: any) {
+      logger.warn('generate:realm-registration-error', { toolId, error: error.message });
+      // Don't fail generation if realm registration fails
+    }
 
     logger.info('generate:complete', { templateId: input.templateId, userId: input.userId, generationTime });
     emit(100, 'Complete');

@@ -4,6 +4,7 @@
 import { Request, Response } from 'express';
 import { Generator } from '../generator/core';
 import { logger } from './logger';
+import { checkUBLAvailability } from '../generator/ubl-integration';
 
 const generator = new Generator();
 
@@ -23,6 +24,17 @@ export async function generateSSE(req: Request, res: Response) {
   }
 
   try {
+    // Check UBL availability before generating
+    const ublCheck = await checkUBLAvailability();
+    if (!ublCheck.available) {
+      send('error', { 
+        error: 'UBL não está disponível no momento',
+        details: ublCheck.error,
+        suggestion: 'Verifique se o UBL Antenna está rodando'
+      });
+      return res.end();
+    }
+
     const { templateId, answers, userId, deployTarget } = req.body || {};
     if (!templateId || !deployTarget) {
       send('error', { error: 'Missing templateId or deployTarget' });

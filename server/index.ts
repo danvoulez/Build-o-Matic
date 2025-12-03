@@ -16,6 +16,7 @@ import { toolsRouter } from './routes/tools';
 import { migrate } from './models/db';
 import { metricsMiddleware, metricsHandler } from './monitoring/prometheus';
 import { deployEngineRouter } from './routes/deploy-engine';
+import { checkUBLAvailability } from '../generator/ubl-integration';
 
 initSentry();
 
@@ -38,8 +39,33 @@ function requireActiveSubscription(req: express.Request, res: express.Response, 
 
 app.post('/api/generate', requireActiveSubscription, async (req, res) => {
   try {
-    const { templateId, answers, userId, deployTarget } = req.body || {};
+    // Check UBL availability before generating
+    const ublCheck = await checkUBLAvailability();
+    if (!ublCheck.available) {
+      logger.warn('generate:ubl-unavailable', { error: ublCheck.error });
+      return res.status(503).json({ 
+        ok: false, 
+        error: 'UBL não está disponível no momento',
+        details: ublCheck.error,
+        suggestion: 'Verifique se o UBL Antenna está rodando e acessível'
+      });
+    }
+
+    const { templateId, answers, userId, deployTarget, toolId } = req.body || {};
     const result = await generator.generate({ templateId, answers, userId, deployTarget });
+    
+    // Save realm_id to database if tool record exists
+    if ((result as any).realmId && toolId) {
+      try {
+        const { setToolRealmId } = await import('./models/tools');
+        await setToolRealmId(toolId, (result as any).realmId);
+        logger.info('generate:realm-id-saved', { toolId, realmId: (result as any).realmId });
+      } catch (e) {
+        // Ignore if toolId not provided or error
+        logger.debug('generate:realm-id-not-saved', { error: (e as any)?.message });
+      }
+    }
+    
     res.json({ ok: true, result });
   } catch (error: any) {
     logger.error('generate:error', { error: error?.message });

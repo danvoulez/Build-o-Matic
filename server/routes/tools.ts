@@ -21,7 +21,7 @@ export function toolsRouter() {
   // Create tool record (before generation)
   router.post('/', async (req, res) => {
     try {
-      const { email, template_id, name, configuration } = req.body || {};
+      const { email, template_id, name, configuration, realm_id } = req.body || {};
       if (!email || !template_id || !name || !configuration) {
         return res.status(400).json({ ok: false, error: 'email, template_id, name, configuration required' });
       }
@@ -36,6 +36,7 @@ export function toolsRouter() {
         deployment_url: null,
         subscription_id: null,
         billing_status: 'trial',
+        realm_id: realm_id || null, // UBL Realm ID
       });
       res.json({ ok: true, tool });
     } catch (e: any) {

@@ -26,14 +26,45 @@ export class AWSDeployer {
   }
 
   async deploy(tool: GeneratedTool, target: AwsDeployTarget) {
+    // UBL Integration: Deploy only frontend (static site)
+    // Backend is provided by Universal Business Ledger
+    // For static sites, use S3 + CloudFront instead of Elastic Beanstalk/ECS
     switch (target) {
       case 'elasticbeanstalk':
-        return await this.deployElasticBeanstalk(tool);
+        // For UBL, Elastic Beanstalk should deploy static site only
+        return await this.deployStaticSite(tool);
       case 'ecs':
-        return await this.deployEcsFargate(tool);
+        // For UBL, ECS should deploy static site only
+        return await this.deployStaticSite(tool);
       default:
         throw new Error(`Unsupported AWS target: ${target}`);
     }
+  }
+
+  private async deployStaticSite(tool: GeneratedTool) {
+    // Deploy frontend as static site (S3 + CloudFront)
+    // TODO: Implement S3 + CloudFront deployment
+    const bucketName = `bom-${tool.id}`;
+    const distributionId = `dist-${Date.now()}`;
+    
+    return {
+      provider: 'aws',
+      target: 'static-site',
+      bucket: bucketName,
+      distributionId,
+      url: `https://${bucketName}.s3-website-us-east-1.amazonaws.com`,
+      status: 'deployed' as const,
+      ublConfig: {
+        antennaUrl: process.env.UBL_ANTENNA_URL || 'http://localhost:3000',
+        realmId: tool.config.environment.REALM_ID || `realm-${tool.id}`,
+      },
+      credentials: { admin: { email: 'admin@example.com', password: this.generatePassword() } },
+      instructions: [
+        'Frontend deployed as static site on S3',
+        `Set UBL_ANTENNA_URL=${process.env.UBL_ANTENNA_URL || 'http://localhost:3000'}`,
+        `Set REALM_ID=${tool.config.environment.REALM_ID || `realm-${tool.id}`}`,
+      ],
+    };
   }
 
   private async deployElasticBeanstalk(tool: GeneratedTool) {

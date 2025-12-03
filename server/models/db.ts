@@ -31,10 +31,24 @@ export async function migrate() {
         deployment_url VARCHAR(500),
         subscription_id VARCHAR(255),
         billing_status VARCHAR(50),
+        realm_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW(),
         deployed_at TIMESTAMP,
         last_active TIMESTAMP
       );
+    `);
+    
+    // Add realm_id column if it doesn't exist (migration)
+    await client.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tools' AND column_name='realm_id'
+        ) THEN
+          ALTER TABLE tools ADD COLUMN realm_id VARCHAR(255);
+        END IF;
+      END $$;
     `);
 
     await client.query(`
