@@ -153,22 +153,22 @@ services:
           preview: 'vite preview'
         },
         dependencies: {
-          'react': '^18.0.0',
-          'react-dom': '^18.0.0',
-          'react-markdown': '^9.0.0',
-          'react-hook-form': '^7.48.0',
-          'recharts': '^2.10.0',
-          'lucide-react': '^0.260.0'
+          'react': '18.3.1',
+          'react-dom': '18.3.1',
+          'react-markdown': '9.0.1',
+          'react-hook-form': '7.53.0',
+          'recharts': '2.12.7',
+          'lucide-react': '0.460.0'
         },
         devDependencies: {
-          '@vitejs/plugin-react': '^4.0.0',
-          'vite': '^5.0.0',
-          'typescript': '^5.0.0',
-          '@types/react': '^18.0.0',
-          '@types/react-dom': '^18.0.0',
-          'tailwindcss': '^3.3.0',
-          'autoprefixer': '^10.4.0',
-          'postcss': '^8.4.0'
+          '@vitejs/plugin-react': '4.3.3',
+          'vite': '5.4.10',
+          'typescript': '5.6.3',
+          '@types/react': '18.3.12',
+          '@types/react-dom': '18.3.1',
+          'tailwindcss': '3.4.14',
+          'autoprefixer': '10.4.20',
+          'postcss': '8.4.47'
         }
       }, null, 2),
       'vite.config.ts': `import { defineConfig } from 'vite';

@@ -4,7 +4,158 @@
  * Validação e sanitização de inputs para prevenir ataques.
  */
 
+// Lista de palavras ofensivas e reservadas (simplificada)
+const OFFENSIVE_WORDS = [
+  'admin', 'root', 'superuser', 'system', 'default', 'test', 'demo',
+  'localhost', 'undefined', 'null', 'void', 'delete'
+];
+
+// Limite de tamanho de payload JSON (em bytes)
+const MAX_JSON_PAYLOAD_SIZE = 100000; // 100KB
+
 export class SecurityValidator {
+  /**
+   * Valida tamanho de payload JSON para evitar DoS
+   */
+  static validateJsonPayloadSize(payload: any): { valid: boolean; size: number; error?: string } {
+    try {
+      const jsonString = JSON.stringify(payload);
+      const sizeInBytes = new TextEncoder().encode(jsonString).length;
+      
+      if (sizeInBytes > MAX_JSON_PAYLOAD_SIZE) {
+        return {
+          valid: false,
+          size: sizeInBytes,
+          error: `Payload exceeds maximum size (${MAX_JSON_PAYLOAD_SIZE} bytes). Current size: ${sizeInBytes} bytes`
+        };
+      }
+      
+      return { valid: true, size: sizeInBytes };
+    } catch (error) {
+      return { valid: false, size: 0, error: 'Invalid JSON payload' };
+    }
+  }
+
+  /**
+   * Valida se o texto contém palavras ofensivas ou reservadas
+   */
+  static validateOffensiveWords(text: string): { valid: boolean; sanitized: string; error?: string } {
+    if (!text || typeof text !== 'string') {
+      return { valid: false, sanitized: '', error: 'Text is required' };
+    }
+
+    const lowerText = text.toLowerCase().trim();
+    const foundOffensiveWords = OFFENSIVE_WORDS.filter(word => 
+      lowerText === word || lowerText.includes(` ${word} `) || 
+      lowerText.startsWith(`${word} `) || lowerText.endsWith(` ${word}`)
+    );
+
+    if (foundOffensiveWords.length > 0) {
+      return {
+        valid: false,
+        sanitized: text,
+        error: `Contains reserved or offensive words: ${foundOffensiveWords.join(', ')}`
+      };
+    }
+
+    return { valid: true, sanitized: text };
+  }
+
+  /**
+   * Sanitiza HTML/Markdown para prevenir XSS persistente
+   */
+  static sanitizeHtml(html: string): { sanitized: string; hadDangerousContent: boolean } {
+    if (!html || typeof html !== 'string') {
+      return { sanitized: '', hadDangerousContent: false };
+    }
+
+    let sanitized = html;
+    let hadDangerousContent = false;
+
+    // Remover scripts
+    const scriptRegex = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
+    if (scriptRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(scriptRegex, '');
+    }
+
+    // Remover event handlers (onclick, onerror, onload, etc.)
+    const eventHandlerRegex = /\s*on\w+\s*=\s*["'][^"']*["']/gi;
+    if (eventHandlerRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(eventHandlerRegex, '');
+    }
+
+    // Remover javascript: URLs
+    const jsUrlRegex = /javascript\s*:/gi;
+    if (jsUrlRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(jsUrlRegex, '');
+    }
+
+    // Remover data: URLs suspeitos
+    const dataUrlRegex = /data:text\/html/gi;
+    if (dataUrlRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(dataUrlRegex, '');
+    }
+
+    // Remover iframes
+    const iframeRegex = /<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi;
+    if (iframeRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(iframeRegex, '');
+    }
+
+    // Remover objetos e embeds
+    const objectRegex = /<(object|embed)\b[^<]*(?:(?!<\/\1>)<[^<]*)*<\/\1>/gi;
+    if (objectRegex.test(sanitized)) {
+      hadDangerousContent = true;
+      sanitized = sanitized.replace(objectRegex, '');
+    }
+
+    return { sanitized, hadDangerousContent };
+  }
+
+  /**
+   * Validação XSS mais agressiva
+   */
+  static validateXSS(input: string): { valid: boolean; sanitized: string; threats: string[] } {
+    const threats: string[] = [];
+    let sanitized = input;
+
+    // Padrões de XSS comuns
+    const xssPatterns = [
+      { pattern: /<script/i, threat: 'script tag' },
+      { pattern: /javascript:/i, threat: 'javascript protocol' },
+      { pattern: /on\w+\s*=/i, threat: 'event handler' },
+      { pattern: /<iframe/i, threat: 'iframe tag' },
+      { pattern: /<object/i, threat: 'object tag' },
+      { pattern: /<embed/i, threat: 'embed tag' },
+      { pattern: /eval\(/i, threat: 'eval function' },
+      { pattern: /expression\(/i, threat: 'expression function' },
+      { pattern: /vbscript:/i, threat: 'vbscript protocol' },
+      { pattern: /data:text\/html/i, threat: 'data URL HTML' },
+      { pattern: /<svg.*onload/i, threat: 'SVG onload' },
+      { pattern: /<img.*onerror/i, threat: 'IMG onerror' }
+    ];
+
+    for (const { pattern, threat } of xssPatterns) {
+      if (pattern.test(sanitized)) {
+        threats.push(threat);
+        sanitized = sanitized.replace(pattern, '');
+      }
+    }
+
+    // Remover tags HTML perigosas
+    sanitized = sanitized.replace(/<[^>]*>/g, '');
+
+    return {
+      valid: threats.length === 0,
+      sanitized,
+      threats
+    };
+  }
   /**
    * Valida e sanitiza nome de empresa
    */
@@ -21,6 +172,17 @@ export class SecurityValidator {
       sanitized = sanitized.substring(0, 100);
     }
 
+    // Validação XSS agressiva
+    const xssResult = this.validateXSS(sanitized);
+    if (!xssResult.valid) {
+      return {
+        valid: false,
+        sanitized: xssResult.sanitized,
+        error: `Company name contains XSS threats: ${xssResult.threats.join(', ')}`
+      };
+    }
+    sanitized = xssResult.sanitized;
+
     // Remover caracteres especiais perigosos
     sanitized = sanitized.replace(/[<>\"'&]/g, '');
     
@@ -31,6 +193,16 @@ export class SecurityValidator {
 
     if (sanitized.length < 1) {
       return { valid: false, sanitized: '', error: 'Company name is too short' };
+    }
+
+    // Validar palavras ofensivas/reservadas
+    const offensiveResult = this.validateOffensiveWords(sanitized);
+    if (!offensiveResult.valid) {
+      return {
+        valid: false,
+        sanitized: '',
+        error: offensiveResult.error
+      };
     }
 
     return { valid: true, sanitized };
@@ -282,6 +454,13 @@ export class SecurityValidator {
   static validateAnswers(answers: any): { valid: boolean; sanitized: any; errors: string[] } {
     const errors: string[] = [];
     const sanitized: any = {};
+
+    // Validar tamanho do payload JSON
+    const payloadSizeResult = this.validateJsonPayloadSize(answers);
+    if (!payloadSizeResult.valid) {
+      errors.push(payloadSizeResult.error || 'Payload too large');
+      return { valid: false, sanitized: {}, errors };
+    }
 
     // Validar companyName
     const companyNameResult = this.validateCompanyName(answers.companyName);
