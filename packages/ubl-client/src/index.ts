@@ -48,7 +48,8 @@ export class LedgerClient {
       return response;
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error instanceof Error && error.name === 'AbortError') {
+      // Check for AbortError more robustly - works for both Error and DOMException
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
         throw new Error(`Request timeout after ${timeoutMs}ms`);
       }
       throw error;

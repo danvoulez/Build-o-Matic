@@ -45,10 +45,15 @@ export class SecurityValidator {
     }
 
     const lowerText = text.toLowerCase().trim();
-    const foundOffensiveWords = OFFENSIVE_WORDS.filter(word => 
-      lowerText === word || lowerText.includes(` ${word} `) || 
-      lowerText.startsWith(`${word} `) || lowerText.endsWith(` ${word}`)
-    );
+    const foundOffensiveWords: string[] = [];
+
+    // Usar word boundaries para detectar palavras completas
+    for (const word of OFFENSIVE_WORDS) {
+      const wordRegex = new RegExp(`\\b${word}\\b`, 'i');
+      if (wordRegex.test(lowerText)) {
+        foundOffensiveWords.push(word);
+      }
+    }
 
     if (foundOffensiveWords.length > 0) {
       return {
@@ -126,29 +131,41 @@ export class SecurityValidator {
 
     // Padrões de XSS comuns
     const xssPatterns = [
-      { pattern: /<script/i, threat: 'script tag' },
-      { pattern: /javascript:/i, threat: 'javascript protocol' },
-      { pattern: /on\w+\s*=/i, threat: 'event handler' },
-      { pattern: /<iframe/i, threat: 'iframe tag' },
-      { pattern: /<object/i, threat: 'object tag' },
-      { pattern: /<embed/i, threat: 'embed tag' },
-      { pattern: /eval\(/i, threat: 'eval function' },
-      { pattern: /expression\(/i, threat: 'expression function' },
-      { pattern: /vbscript:/i, threat: 'vbscript protocol' },
-      { pattern: /data:text\/html/i, threat: 'data URL HTML' },
-      { pattern: /<svg.*onload/i, threat: 'SVG onload' },
-      { pattern: /<img.*onerror/i, threat: 'IMG onerror' }
+      { pattern: /<script/gi, threat: 'script tag' },
+      { pattern: /javascript:/gi, threat: 'javascript protocol' },
+      { pattern: /on\w+\s*=/gi, threat: 'event handler' },
+      { pattern: /<iframe/gi, threat: 'iframe tag' },
+      { pattern: /<object/gi, threat: 'object tag' },
+      { pattern: /<embed/gi, threat: 'embed tag' },
+      { pattern: /eval\(/gi, threat: 'eval function' },
+      { pattern: /expression\(/gi, threat: 'expression function' },
+      { pattern: /vbscript:/gi, threat: 'vbscript protocol' },
+      { pattern: /data:text\/html/gi, threat: 'data URL HTML' },
+      { pattern: /<svg.*onload/gi, threat: 'SVG onload' },
+      { pattern: /<img.*onerror/gi, threat: 'IMG onerror' }
     ];
 
+    // Remove todas as instâncias de cada padrão usando while loop
     for (const { pattern, threat } of xssPatterns) {
-      if (pattern.test(sanitized)) {
-        threats.push(threat);
+      let found = false;
+      while (pattern.test(sanitized)) {
+        found = true;
         sanitized = sanitized.replace(pattern, '');
+        // Reset regex lastIndex for global patterns
+        pattern.lastIndex = 0;
+      }
+      if (found) {
+        threats.push(threat);
       }
     }
 
-    // Remover tags HTML perigosas
-    sanitized = sanitized.replace(/<[^>]*>/g, '');
+    // Remover tags HTML perigosas de forma mais robusta
+    // Remove tags com atributos malformados
+    sanitized = sanitized.replace(/<[^>]*>/g, (match) => {
+      // Permitir apenas tags seguras específicas se necessário
+      // Por ora, remove todas as tags
+      return '';
+    });
 
     return {
       valid: threats.length === 0,
