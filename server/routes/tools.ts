@@ -1,17 +1,31 @@
 import { Router } from 'express';
 import { getOrCreateUserByEmail } from '../models/users';
 import { createTool, listToolsByUser, getTool, updateToolStatus, setToolDeployment } from '../models/tools';
+import { authenticateJWT, getUserIdFromToken, getUserEmailFromToken, devAuthBypass } from '../middleware/auth';
 
 export function toolsRouter() {
   const router = Router();
 
-  // List tools by user email (simple for MVP)
+  // Apply authentication to all routes
+  // In development, devAuthBypass allows testing without Auth0
+  // In production, authenticateJWT enforces JWT validation
+  if (process.env.DEV_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production') {
+    router.use(devAuthBypass);
+  } else {
+    router.use(authenticateJWT);
+  }
+
+  // List tools by authenticated user (JWT-based)
   router.get('/', async (req, res) => {
     try {
-      const email = String(req.query.email || '');
-      if (!email) return res.status(400).json({ ok: false, error: 'email required' });
-      const user = await getOrCreateUserByEmail(email);
+      // Extract userId from verified JWT token (not from query params!)
+      const userId = getUserIdFromToken(req);
+      const email = getUserEmailFromToken(req);
+
+      // Get or create user record using Auth0 userId
+      const user = await getOrCreateUserByEmail(email || userId, undefined);
       const tools = await listToolsByUser(user.id);
+
       res.json({ ok: true, tools });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message || 'Failed to list tools' });
@@ -21,11 +35,21 @@ export function toolsRouter() {
   // Create tool record (before generation)
   router.post('/', async (req, res) => {
     try {
-      const { email, template_id, name, configuration, realm_id } = req.body || {};
-      if (!email || !template_id || !name || !configuration) {
-        return res.status(400).json({ ok: false, error: 'email, template_id, name, configuration required' });
+      // Extract userId from JWT - NO MORE EMAIL IN REQUEST BODY
+      const userId = getUserIdFromToken(req);
+      const email = getUserEmailFromToken(req);
+
+      const { template_id, name, configuration, realm_id } = req.body || {};
+      if (!template_id || !name || !configuration) {
+        return res.status(400).json({
+          ok: false,
+          error: 'template_id, name, configuration required'
+        });
       }
-      const user = await getOrCreateUserByEmail(email);
+
+      // Get or create user using Auth0 identity
+      const user = await getOrCreateUserByEmail(email || userId, undefined);
+
       const tool = await createTool({
         user_id: user.id,
         template_id,
@@ -38,6 +62,7 @@ export function toolsRouter() {
         billing_status: 'trial',
         realm_id: realm_id || null, // UBL Realm ID
       });
+
       res.json({ ok: true, tool });
     } catch (e: any) {
       res.status(500).json({ ok: false, error: e?.message || 'Failed to create tool' });

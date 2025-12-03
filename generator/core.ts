@@ -119,10 +119,15 @@ export class Generator {
       },
     };
 
-    // UBL Integration: Register Realm after generation
-    emit(98, 'Registering Realm in UBL');
+    // SAGA PATTERN: State tracking for transactional deployment
+    let realmRegistered = false;
+    let realmId: string | null = null;
+    let deploymentStarted = false;
+
     try {
-      const realmId = generateRealmId(toolId);
+      // STATE 1: Register Realm in UBL
+      emit(85, 'Registering Realm in UBL');
+      realmId = generateRealmId(toolId);
       const realmRegistration = await registerRealmInUBL({
         id: realmId,
         name: input.answers.companyName || customized.config.settings?.companyName || 'Generated Tool',
@@ -134,28 +139,94 @@ export class Generator {
         }
       });
 
-      if (realmRegistration.success) {
-        logger.info('generate:realm-registered', { toolId, realmId: realmRegistration.realmId });
-        // Add realm ID to config for deployment
-        result.config.environment.REALM_ID = realmRegistration.realmId;
-        // Store realm_id in result metadata for database storage
-        (result as any).realmId = realmRegistration.realmId;
-      } else {
-        logger.warn('generate:realm-registration-failed', { 
-          toolId, 
-          realmId: realmRegistration.realmId,
-          error: realmRegistration.error 
-        });
-        // Don't fail generation if realm registration fails
+      if (!realmRegistration.success) {
+        throw new GeneratorError(
+          `Realm registration failed: ${realmRegistration.error}`
+        );
       }
-    } catch (error: any) {
-      logger.warn('generate:realm-registration-error', { toolId, error: error.message });
-      // Don't fail generation if realm registration fails
-    }
 
-    logger.info('generate:complete', { templateId: input.templateId, userId: input.userId, generationTime });
-    emit(100, 'Complete');
-    return result;
+      realmRegistered = true;
+      logger.info('generate:realm-registered', { toolId, realmId: realmRegistration.realmId });
+
+      // Add realm ID to config for deployment
+      result.config.environment.REALM_ID = realmRegistration.realmId;
+      (result as any).realmId = realmRegistration.realmId;
+
+      // STATE 2: Deploy to Platform (if deployment is requested)
+      if (input.deployTarget && input.deployTarget !== 'docker') {
+        emit(90, 'Deploying to platform');
+        deploymentStarted = true;
+
+        // Note: Actual deployment integration would go here
+        // For now, we just mark that deployment was attempted
+        logger.info('generate:deployment-initiated', { toolId, target: input.deployTarget });
+      }
+
+      logger.info('generate:complete', { templateId: input.templateId, userId: input.userId, generationTime });
+      emit(100, 'Complete');
+      return result;
+
+    } catch (error: any) {
+      // COMPENSATION LOGIC (Saga Rollback)
+      logger.error('generate:saga-error', {
+        toolId,
+        realmId,
+        realmRegistered,
+        deploymentStarted,
+        error: error.message
+      });
+      emit(0, 'Rolling back due to error');
+
+      // Rollback Realm registration if it succeeded
+      if (realmRegistered && realmId) {
+        logger.warn('generate:compensating-realm', { realmId });
+        try {
+          await this.compensateRealmRegistration(realmId);
+          logger.info('generate:realm-compensated', { realmId });
+        } catch (compensateError: any) {
+          // Compensation failed - log for manual intervention
+          logger.error('generate:compensation-failed', {
+            realmId,
+            originalError: error.message,
+            compensationError: compensateError.message
+          });
+          // TODO: Push to dead-letter queue for ops team
+        }
+      }
+
+      // Re-throw original error
+      throw error;
+    }
+  }
+
+  /**
+   * Compensate Realm registration by deleting the Realm from UBL
+   * Called when deployment fails after Realm was created
+   */
+  private async compensateRealmRegistration(realmId: string): Promise<void> {
+    const ublAntennaUrl = process.env.UBL_ANTENNA_URL || 'http://localhost:3000';
+
+    try {
+      const response = await fetch(`${ublAntennaUrl}/realms/${realmId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.UBL_API_KEY && {
+            'Authorization': `Bearer ${process.env.UBL_API_KEY}`
+          })
+        }
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to delete Realm ${realmId}: ${error || response.statusText}`);
+      }
+
+      logger.info('generate:realm-deleted', { realmId });
+    } catch (error: any) {
+      logger.error('generate:realm-deletion-failed', { realmId, error: error.message });
+      throw error;
+    }
   }
 
   private validateAnswers(template: any, answers: Record<string, any>): void {

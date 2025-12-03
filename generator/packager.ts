@@ -5,6 +5,7 @@
 import * as zlib from 'zlib';
 import * as tar from 'tar-stream';
 import { SecurityValidator } from './security/validator';
+import { DocsEngine } from './docs-engine';
 
 export class Packager {
   async package(customized: any, deployTarget: string) {
@@ -125,6 +126,24 @@ services:
     const dashboardWidgetsCode = this.generateDashboardWidgets();
     const dataGridCode = this.generateDataGrid();
 
+    // Generate personalized documentation
+    const docsEngine = new DocsEngine();
+    const userGuide = docsEngine.generate({
+      template: {
+        id: customized.template?.id || 'unknown',
+        name: customized.template?.name || 'Generated Tool',
+        description: customized.template?.description || '',
+        questions: customized.template?.questions || [],
+        features: customized.template?.features || {}
+      },
+      answers: customized.answers || {},
+      metadata: {
+        deploymentUrl: customized.config.environment?.DEPLOYMENT_URL,
+        realmId: realmId,
+        generatedAt: new Date().toISOString()
+      }
+    });
+
     return {
       'frontend/App.tsx': customized.code.frontend,
       'frontend/Layout.tsx': layoutCode,
@@ -142,6 +161,7 @@ services:
         id: realmId,
         name: customized.config.settings?.companyName || 'Generated Tool'
       }, null, 2),
+      'USER_GUIDE.md': userGuide,
       'index.html': this.generateIndexHtml(customized.config.settings?.companyName || 'Generated Tool', theme),
       'package.json': JSON.stringify({
         name: 'buildomatic-generated-tool',

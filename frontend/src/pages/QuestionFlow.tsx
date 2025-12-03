@@ -51,8 +51,8 @@ export default function QuestionFlow() {
     } else {
       toast.info('Gerando sua ferramenta...');
       try {
+        // No email field - backend extracts userId from JWT token
         await createTool({
-          email: 'admin@example.com',
           template_id: template!.id,
           name: `${answers.companyName} - ${template!.name}`,
           configuration: { ...answers }
