@@ -1,6 +1,6 @@
 {
   "name": "build-o-matic-server",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -10,12 +10,15 @@
     "dev": "tsx watch index.ts"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
+    "@sentry/node": "^8.30.0",
+    "@sentry/profiling-node": "^8.30.0",
     "body-parser": "^1.20.2",
-    "pg": "^8.11.3",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "pg": "^8.11.3",
+    "prom-client": "^15.1.3",
     "stripe": "^14.0.0"
   },
   "devDependencies": {
