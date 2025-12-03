@@ -72,3 +72,22 @@ export function useCreateTool() {
     }
   });
 }
+
+export async function deployViaEngine(payload: { toolPackage: any; target: any }) {
+  const res = await fetch('/api/deploy/engine', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-subscription-active': 'true' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json(); // { ok, result }
+}
+
+export async function checkEngineAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/deploy/engine', { method: 'OPTIONS' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
