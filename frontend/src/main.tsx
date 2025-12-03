@@ -11,22 +11,27 @@ import Pricing from './pages/Pricing';
 import FAQ from './pages/FAQ';
 import Templates from './pages/Templates';
 import './tailwind.css';
+import { initSentry, withSentryRouter } from './monitoring/sentry.client';
 
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <AppLayout />,
-    children: [
-      { index: true, element: <Home /> },
-      { path: 'templates', element: <Templates /> },
-      { path: 'pricing', element: <Pricing /> },
-      { path: 'faq', element: <FAQ /> },
-      { path: 'build/:templateId', element: <QuestionFlow /> },
-      { path: 'generate', element: <Generation /> },
-      { path: 'deployed', element: <Deployed /> }
-    ]
-  }
-]);
+initSentry();
+
+const router = withSentryRouter(
+  createBrowserRouter([
+    {
+      path: '/',
+      element: <AppLayout />,
+      children: [
+        { index: true, element: <Home /> },
+        { path: 'templates', element: <Templates /> },
+        { path: 'pricing', element: <Pricing /> },
+        { path: 'faq', element: <FAQ /> },
+        { path: 'build/:templateId', element: <QuestionFlow /> },
+        { path: 'generate', element: <Generation /> },
+        { path: 'deployed', element: <Deployed /> }
+      ]
+    }
+  ])
+);
 
 const queryClient = new QueryClient();
 
