@@ -6,44 +6,40 @@ import * as zlib from 'zlib';
 import * as tar from 'tar-stream';
 import { SecurityValidator } from './security/validator';
 import { DocsEngine } from './docs-engine';
-
 export class Packager {
-  async package(customized: any, deployTarget: string, realmScopedKey?: string) {
-    switch (deployTarget) {
-      case 'railway':
-        return this.packageForRailway(customized, realmScopedKey);
-      case 'render':
-        return this.packageForRender(customized, realmScopedKey);
-      case 'docker':
-        return this.packageForDocker(customized, realmScopedKey);
-      default:
-        throw new Error(`Unknown deploy target: ${deployTarget}`);
+    async package(customized, deployTarget, realmScopedKey) {
+        switch (deployTarget) {
+            case 'railway':
+                return this.packageForRailway(customized, realmScopedKey);
+            case 'render':
+                return this.packageForRender(customized, realmScopedKey);
+            case 'docker':
+                return this.packageForDocker(customized, realmScopedKey);
+            default:
+                throw new Error(`Unknown deploy target: ${deployTarget}`);
+        }
     }
-  }
-
-  private async packageForRailway(customized: any, realmScopedKey?: string) {
-    const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
-    const files = this.basicFiles(customized, 'railway', realmId, realmScopedKey);
-    files['railway.json'] = JSON.stringify({
-      services: [
-        { name: 'backend', startCommand: 'npm start', env: { NODE_ENV: 'production' } },
-        { name: 'frontend', startCommand: 'npm start', env: { NODE_ENV: 'production' } }
-      ]
-    }, null, 2);
-    const artifact = await this.createTarGz(files);
-
-    return {
-      type: 'railway',
-      package: artifact,
-      instructions: 'Import artifact into Railway or push via CLI; set env vars accordingly.',
-      url: '', // will be set by deployer
-    };
-  }
-
-  private async packageForRender(customized: any, realmScopedKey?: string) {
-    const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
-    const files = this.basicFiles(customized, 'render', realmId, realmScopedKey);
-    files['render.yaml'] = `
+    async packageForRailway(customized, realmScopedKey) {
+        const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
+        const files = this.basicFiles(customized, 'railway', realmId, realmScopedKey);
+        files['railway.json'] = JSON.stringify({
+            services: [
+                { name: 'backend', startCommand: 'npm start', env: { NODE_ENV: 'production' } },
+                { name: 'frontend', startCommand: 'npm start', env: { NODE_ENV: 'production' } }
+            ]
+        }, null, 2);
+        const artifact = await this.createTarGz(files);
+        return {
+            type: 'railway',
+            package: artifact,
+            instructions: 'Import artifact into Railway or push via CLI; set env vars accordingly.',
+            url: '', // will be set by deployer
+        };
+    }
+    async packageForRender(customized, realmScopedKey) {
+        const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
+        const files = this.basicFiles(customized, 'render', realmId, realmScopedKey);
+        files['render.yaml'] = `
 services:
   - type: web
     name: backend
@@ -58,21 +54,19 @@ services:
     buildCommand: "npm install && npm run build"
     startCommand: "npm start"
 `.trim();
-    const artifact = await this.createTarGz(files);
-
-    return {
-      type: 'render',
-      package: artifact,
-      instructions: 'Create services in Render and upload artifact via deploy hook.',
-      url: '',
-    };
-  }
-
-  private async packageForDocker(customized: any, realmScopedKey?: string) {
-    const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
-    const files = this.basicFiles(customized, 'docker', realmId, realmScopedKey);
-    files['Dockerfile'] = this.generateDockerfile(customized);
-    files['docker-compose.yml'] = `
+        const artifact = await this.createTarGz(files);
+        return {
+            type: 'render',
+            package: artifact,
+            instructions: 'Create services in Render and upload artifact via deploy hook.',
+            url: '',
+        };
+    }
+    async packageForDocker(customized, realmScopedKey) {
+        const realmId = customized.config.environment?.REALM_ID || `realm-${customized.config.settings?.toolId || Date.now()}`;
+        const files = this.basicFiles(customized, 'docker', realmId, realmScopedKey);
+        files['Dockerfile'] = this.generateDockerfile(customized);
+        files['docker-compose.yml'] = `
 version: "3.9"
 services:
   app:
@@ -83,116 +77,107 @@ services:
       NODE_ENV: production
       DATABASE_URL: \${DATABASE_URL}
 `.trim();
-    const artifact = await this.createTarGz(files);
-
-    return {
-      type: 'docker',
-      package: artifact,
-      instructions: 'docker build -t buildomatic-tool . && docker run -p 3000:3000 buildomatic-tool',
-      url: '',
-    };
-  }
-
-    private basicFiles(customized: any, target: string, realmId: string, realmScopedKey?: string) {
-    // UBL Client code - embedded directly (no NPM dependency needed)
-    const ledgerClientCode = this.getEmbeddedUBLClient(realmId);
-    
-    // Theme from customized object
-    const theme = customized.theme || {
-      colors: {
-        primary: '#6366f1',
-        secondary: '#a855f7',
-        accent: '#ec4899',
-        background: '#ffffff',
-        surface: '#f9fafb',
-        text: '#111827'
-      },
-      borderRadius: '0.75rem',
-      fontFamily: 'Plus Jakarta Sans, sans-serif',
-      componentStyle: 'shadow'
-    };
-
-    // Generate Tailwind config
-    const tailwindConfig = this.generateTailwindConfig(theme);
-    
-    // Generate global CSS
-    const globalCss = this.generateGlobalCSS(theme);
-    
-    // Generate Layout component
-    const layoutCode = customized.code.layout || 'export default function Layout({ children }: { children: React.ReactNode }) { return <div>{children}</div>; }';
-    
-    // Generate advanced components
-    const autoFormCode = this.generateAutoForm();
-    const dashboardWidgetsCode = this.generateDashboardWidgets();
-    const dataGridCode = this.generateDataGrid();
-
-    // Generate personalized documentation
-    const docsEngine = new DocsEngine();
-    const userGuide = docsEngine.generate({
-      template: {
-        id: customized.template?.id || 'unknown',
-        name: customized.template?.name || 'Generated Tool',
-        description: customized.template?.description || '',
-        questions: customized.template?.questions || [],
-        features: customized.template?.features || {}
-      },
-      answers: customized.answers || {},
-      metadata: {
-        deploymentUrl: customized.config.environment?.DEPLOYMENT_URL,
-        realmId: realmId,
-        generatedAt: new Date().toISOString()
-      }
-    });
-
-    return {
-      'frontend/App.tsx': customized.code.frontend,
-      'frontend/Layout.tsx': layoutCode,
-      'frontend/main.tsx': this.generateMainTsx(),
-      'frontend/ledger-client.ts': ledgerClientCode,
-      'frontend/components/AutoForm.tsx': autoFormCode,
-      'frontend/components/DashboardWidgets.tsx': dashboardWidgetsCode,
-      'frontend/components/DataGrid.tsx': dataGridCode,
-      'frontend/index.css': globalCss,
-      'tailwind.config.js': tailwindConfig,
-      'postcss.config.js': 'module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }',
-      'intents/index.ts': customized.code.intents,
-      'agreements/config.ts': customized.code.agreements,
-      'realm/config.json': JSON.stringify({
-        id: realmId,
-        name: customized.config.settings?.companyName || 'Generated Tool'
-      }, null, 2),
-      'USER_GUIDE.md': userGuide,
-      'index.html': this.generateIndexHtml(customized.config.settings?.companyName || 'Generated Tool', theme),
-      'package.json': JSON.stringify({
-        name: 'buildomatic-generated-tool',
-        version: '1.0.0',
-        type: 'module',
-        scripts: {
-          dev: 'vite',
-          build: 'vite build',
-          preview: 'vite preview'
-        },
-        dependencies: {
-          'react': '18.2.0',
-          'react-dom': '18.2.0',
-          'react-markdown': '9.0.1',
-          'react-hook-form': '7.48.2',
-          'recharts': '2.10.3',
-          'lucide-react': '0.263.1',
-          'framer-motion': '10.16.16'
-        },
-        devDependencies: {
-          '@vitejs/plugin-react': '4.2.1',
-          'vite': '5.0.8',
-          'typescript': '5.3.3',
-          '@types/react': '18.2.43',
-          '@types/react-dom': '18.2.17',
-          'tailwindcss': '3.3.6',
-          'autoprefixer': '10.4.16',
-          'postcss': '8.4.32'
-        }
-      }, null, 2),
-      'vite.config.ts': `import { defineConfig } from 'vite';
+        const artifact = await this.createTarGz(files);
+        return {
+            type: 'docker',
+            package: artifact,
+            instructions: 'docker build -t buildomatic-tool . && docker run -p 3000:3000 buildomatic-tool',
+            url: '',
+        };
+    }
+    basicFiles(customized, target, realmId, realmScopedKey) {
+        // UBL Client code - embedded directly (no NPM dependency needed)
+        const ledgerClientCode = this.getEmbeddedUBLClient(realmId);
+        // Theme from customized object
+        const theme = customized.theme || {
+            colors: {
+                primary: '#6366f1',
+                secondary: '#a855f7',
+                accent: '#ec4899',
+                background: '#ffffff',
+                surface: '#f9fafb',
+                text: '#111827'
+            },
+            borderRadius: '0.75rem',
+            fontFamily: 'Plus Jakarta Sans, sans-serif',
+            componentStyle: 'shadow'
+        };
+        // Generate Tailwind config
+        const tailwindConfig = this.generateTailwindConfig(theme);
+        // Generate global CSS
+        const globalCss = this.generateGlobalCSS(theme);
+        // Generate Layout component
+        const layoutCode = customized.code.layout || 'export default function Layout({ children }: { children: React.ReactNode }) { return <div>{children}</div>; }';
+        // Generate advanced components
+        const autoFormCode = this.generateAutoForm();
+        const dashboardWidgetsCode = this.generateDashboardWidgets();
+        const dataGridCode = this.generateDataGrid();
+        // Generate personalized documentation
+        const docsEngine = new DocsEngine();
+        const userGuide = docsEngine.generate({
+            template: {
+                id: customized.template?.id || 'unknown',
+                name: customized.template?.name || 'Generated Tool',
+                description: customized.template?.description || '',
+                questions: customized.template?.questions || [],
+                features: customized.template?.features || {}
+            },
+            answers: customized.answers || {},
+            metadata: {
+                deploymentUrl: customized.config.environment?.DEPLOYMENT_URL,
+                realmId: realmId,
+                generatedAt: new Date().toISOString()
+            }
+        });
+        return {
+            'frontend/App.tsx': customized.code.frontend,
+            'frontend/Layout.tsx': layoutCode,
+            'frontend/main.tsx': this.generateMainTsx(),
+            'frontend/ledger-client.ts': ledgerClientCode,
+            'frontend/components/AutoForm.tsx': autoFormCode,
+            'frontend/components/DashboardWidgets.tsx': dashboardWidgetsCode,
+            'frontend/components/DataGrid.tsx': dataGridCode,
+            'frontend/index.css': globalCss,
+            'tailwind.config.js': tailwindConfig,
+            'postcss.config.js': 'module.exports = { plugins: { tailwindcss: {}, autoprefixer: {} } }',
+            'intents/index.ts': customized.code.intents,
+            'agreements/config.ts': customized.code.agreements,
+            'realm/config.json': JSON.stringify({
+                id: realmId,
+                name: customized.config.settings?.companyName || 'Generated Tool'
+            }, null, 2),
+            'USER_GUIDE.md': userGuide,
+            'index.html': this.generateIndexHtml(customized.config.settings?.companyName || 'Generated Tool', theme),
+            'package.json': JSON.stringify({
+                name: 'buildomatic-generated-tool',
+                version: '1.0.0',
+                type: 'module',
+                scripts: {
+                    dev: 'vite',
+                    build: 'vite build',
+                    preview: 'vite preview'
+                },
+                dependencies: {
+                    'react': '18.2.0',
+                    'react-dom': '18.2.0',
+                    'react-markdown': '9.0.1',
+                    'react-hook-form': '7.48.2',
+                    'recharts': '2.10.3',
+                    'lucide-react': '0.263.1',
+                    'framer-motion': '10.16.16'
+                },
+                devDependencies: {
+                    '@vitejs/plugin-react': '4.2.1',
+                    'vite': '5.0.8',
+                    'typescript': '5.3.3',
+                    '@types/react': '18.2.43',
+                    '@types/react-dom': '18.2.17',
+                    'tailwindcss': '3.3.6',
+                    'autoprefixer': '10.4.16',
+                    'postcss': '8.4.32'
+                }
+            }, null, 2),
+            'vite.config.ts': `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -203,7 +188,7 @@ export default defineConfig({
   }
 });
 `,
-      '.env.example': `# UBL Antenna URL (backend)
+            '.env.example': `# UBL Antenna URL (backend)
 VITE_UBL_ANTENNA_URL=http://localhost:3000
 
 # Realm ID (injected at generation time)
@@ -214,7 +199,7 @@ VITE_REALM_ID=${realmId}
 # Generated automatically - DO NOT use master/admin keys here
 VITE_UBL_API_KEY=${realmScopedKey || 'your-realm-scoped-api-key-here'}
 `,
-      'README.md': `# Generated Tool
+            'README.md': `# Generated Tool
 
 Uses Universal Business Ledger as backend.
 
@@ -246,12 +231,11 @@ npm run dev
 npm run build
 \`\`\`
 `
-    };
-  }
-
-  private getEmbeddedUBLClient(realmId: string): string {
-    // Embedded UBL Client - no NPM dependency needed
-    return `/**
+        };
+    }
+    getEmbeddedUBLClient(realmId) {
+        // Embedded UBL Client - no NPM dependency needed
+        return `/**
  * UBL Client - Embedded (no external dependency)
  * 
  * This client is embedded directly in the generated tool.
@@ -434,45 +418,40 @@ export const ledger = createLedgerClient({
   apiKey: import.meta.env.VITE_UBL_API_KEY,
 });
 `;
-  }
-
-  private dependenciesObject(deps: string[] = []) {
-    const out: Record<string, string> = {};
-    for (const d of deps) out[d] = 'latest';
-    return out;
-  }
-
-  private async createTarGz(files: Record<string, string>): Promise<Buffer> {
-    const pack = tar.pack();
-    for (const [filepath, content] of Object.entries(files)) {
-      // SECURITY: Validar e sanitizar caminho do arquivo
-      const pathValidation = SecurityValidator.sanitizeFilePath(filepath);
-      if (!pathValidation.valid) {
-        throw new Error(`Invalid file path: ${filepath} - ${pathValidation.error}`);
-      }
-      
-      // SECURITY: Validar tamanho do conteúdo (limitar a 10MB por arquivo)
-      const maxFileSize = 10 * 1024 * 1024; // 10MB
-      if (content.length > maxFileSize) {
-        throw new Error(`File ${filepath} exceeds maximum size of ${maxFileSize} bytes`);
-      }
-      
-      pack.entry({ name: pathValidation.sanitized }, content);
     }
-    pack.finalize();
-
-    const chunks: Buffer[] = [];
-    const gzip = zlib.createGzip();
-    return await new Promise<Buffer>((resolve, reject) => {
-      pack.pipe(gzip)
-        .on('data', chunk => chunks.push(chunk))
-        .on('end', () => resolve(Buffer.concat(chunks)))
-        .on('error', reject);
-    });
-  }
-
-  private generateDockerfile(_customized: any): string {
-    return `
+    dependenciesObject(deps = []) {
+        const out = {};
+        for (const d of deps)
+            out[d] = 'latest';
+        return out;
+    }
+    async createTarGz(files) {
+        const pack = tar.pack();
+        for (const [filepath, content] of Object.entries(files)) {
+            // SECURITY: Validar e sanitizar caminho do arquivo
+            const pathValidation = SecurityValidator.sanitizeFilePath(filepath);
+            if (!pathValidation.valid) {
+                throw new Error(`Invalid file path: ${filepath} - ${pathValidation.error}`);
+            }
+            // SECURITY: Validar tamanho do conteúdo (limitar a 10MB por arquivo)
+            const maxFileSize = 10 * 1024 * 1024; // 10MB
+            if (content.length > maxFileSize) {
+                throw new Error(`File ${filepath} exceeds maximum size of ${maxFileSize} bytes`);
+            }
+            pack.entry({ name: pathValidation.sanitized }, content);
+        }
+        pack.finalize();
+        const chunks = [];
+        const gzip = zlib.createGzip();
+        return await new Promise((resolve, reject) => {
+            pack.pipe(gzip)
+                .on('data', chunk => chunks.push(chunk))
+                .on('end', () => resolve(Buffer.concat(chunks)))
+                .on('error', reject);
+        });
+    }
+    generateDockerfile(_customized) {
+        return `
 FROM node:18
 WORKDIR /app
 COPY package.json .
@@ -481,16 +460,14 @@ COPY . .
 EXPOSE 3000
 CMD ["npm", "start"]
     `.trim();
-  }
-
-  /**
-   * Generate Tailwind config based on theme
-   */
-  private generateTailwindConfig(theme: any): string {
-    const surfaceHover = this.addOpacity(theme.colors.surface, 0.8);
-    const fontFamily = theme.fontFamily.split(',')[0].trim();
-    
-    return `/** @type {import('tailwindcss').Config} */
+    }
+    /**
+     * Generate Tailwind config based on theme
+     */
+    generateTailwindConfig(theme) {
+        const surfaceHover = this.addOpacity(theme.colors.surface, 0.8);
+        const fontFamily = theme.fontFamily.split(',')[0].trim();
+        return `/** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
     "./index.html",
@@ -522,16 +499,14 @@ module.exports = {
   plugins: [],
 }
 `;
-  }
-
-  /**
-   * Generate global CSS with Tailwind and component classes
-   */
-  private generateGlobalCSS(theme: any): string {
-    const shadowClass = theme.componentStyle === 'shadow' ? 'shadow-md' : '';
-    const borderClass = theme.componentStyle === 'bordered' ? 'border border-border' : '';
-    
-    return `@tailwind base;
+    }
+    /**
+     * Generate global CSS with Tailwind and component classes
+     */
+    generateGlobalCSS(theme) {
+        const shadowClass = theme.componentStyle === 'shadow' ? 'shadow-md' : '';
+        const borderClass = theme.componentStyle === 'bordered' ? 'border border-border' : '';
+        return `@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -595,13 +570,12 @@ body {
   animation: fade-in 0.3s ease-out;
 }
 `;
-  }
-
-  /**
-   * Generate AutoForm component
-   */
-  private generateAutoForm(): string {
-    return `import React from 'react';
+    }
+    /**
+     * Generate AutoForm component
+     */
+    generateAutoForm() {
+        return `import React from 'react';
 import { useForm } from 'react-hook-form';
 import { Send } from 'lucide-react';
 
@@ -695,13 +669,12 @@ export default function AutoForm({ schema, onSubmit, loading, submitLabel = 'Sal
   );
 }
 `;
-  }
-
-  /**
-   * Generate DashboardWidgets component
-   */
-  private generateDashboardWidgets(): string {
-    return `import React, { useMemo } from 'react';
+    }
+    /**
+     * Generate DashboardWidgets component
+     */
+    generateDashboardWidgets() {
+        return `import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // Helper para agrupar dados para gráficos
@@ -770,13 +743,12 @@ export const DashboardWidget = ({ title, type, data, config }: any) => {
   );
 };
 `;
-  }
-
-  /**
-   * Generate DataGrid component
-   */
-  private generateDataGrid(): string {
-    return `import React, { useState } from 'react';
+    }
+    /**
+     * Generate DataGrid component
+     */
+    generateDataGrid() {
+        return `import React, { useState } from 'react';
 import { Search, ChevronRight } from 'lucide-react';
 
 interface Column {
@@ -856,13 +828,12 @@ export default function DataGrid({ data, columns, onRowClick }: any) {
   );
 }
 `;
-  }
-
-  /**
-   * Generate main.tsx entry point
-   */
-  private generateMainTsx(): string {
-    return `import React from 'react';
+    }
+    /**
+     * Generate main.tsx entry point
+     */
+    generateMainTsx() {
+        return `import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
@@ -876,26 +847,23 @@ if (rootElement) {
   );
 }
 `;
-  }
-
-  /**
-   * Generate index.html with font imports
-   */
-  private generateIndexHtml(title: string, theme: any): string {
-    // Map font families to Google Fonts URLs
-    const fontMap: Record<string, string> = {
-      'Inter': 'Inter:wght@400;600',
-      'Plus Jakarta Sans': 'Plus+Jakarta+Sans:wght@400;600',
-      'Roboto Mono': 'Roboto+Mono:wght@400',
-      'Merriweather': 'Merriweather:wght@400;700',
-      'Poppins': 'Poppins:wght@400;600',
-    };
-    
-    const fontFamily = theme.fontFamily.split(',')[0].trim();
-    const fontUrl = fontMap[fontFamily] || 'Inter:wght@400;600';
-    const fontLink = 'https://fonts.googleapis.com/css2?family=' + fontUrl + '&display=swap';
-    
-    const htmlContent = `<!doctype html>
+    }
+    /**
+     * Generate index.html with font imports
+     */
+    generateIndexHtml(title, theme) {
+        // Map font families to Google Fonts URLs
+        const fontMap = {
+            'Inter': 'Inter:wght@400;600',
+            'Plus Jakarta Sans': 'Plus+Jakarta+Sans:wght@400;600',
+            'Roboto Mono': 'Roboto+Mono:wght@400',
+            'Merriweather': 'Merriweather:wght@400;700',
+            'Poppins': 'Poppins:wght@400;600',
+        };
+        const fontFamily = theme.fontFamily.split(',')[0].trim();
+        const fontUrl = fontMap[fontFamily] || 'Inter:wght@400;600';
+        const fontLink = 'https://fonts.googleapis.com/css2?family=' + fontUrl + '&display=swap';
+        const htmlContent = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -911,17 +879,16 @@ if (rootElement) {
     <script type="module" src="/frontend/main.tsx"></script>
   </body>
 </html>`;
-    return htmlContent;
-  }
-
-  /**
-   * Helper to add opacity to hex color
-   */
-  private addOpacity(hex: string, opacity: number): string {
-    // Simple implementation - assumes hex color
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + opacity + ')';
-  }
+        return htmlContent;
+    }
+    /**
+     * Helper to add opacity to hex color
+     */
+    addOpacity(hex, opacity) {
+        // Simple implementation - assumes hex color
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + opacity + ')';
+    }
 }

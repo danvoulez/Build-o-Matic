@@ -101,7 +101,8 @@ export class Generator {
     const customized = await this.customizer.apply(template as any, answersValidation.sanitized);
 
     emit(75, 'Packaging');
-    const packaged = await this.packager.package(customized, input.deployTarget);
+    // Note: realmScopedKey will be passed via result object
+    const packaged = await this.packager.package(customized, input.deployTarget, (result as any).realmScopedKey);
 
     emit(95, 'Finalizing');
     const generationTime = Date.now() - startTime;
@@ -148,9 +149,15 @@ export class Generator {
       realmRegistered = true;
       logger.info('generate:realm-registered', { toolId, realmId: realmRegistration.realmId });
 
-      // Add realm ID to config for deployment
+      // STATE 1.5: Get realm-scoped API key from UBL
+      emit(87, 'Obtaining realm-scoped API key');
+      const realmScopedKey = await this.getRealmScopedKey(realmRegistration.realmId);
+      
+      // Add realm ID and scoped key to config for deployment
       result.config.environment.REALM_ID = realmRegistration.realmId;
+      result.config.secrets.UBL_API_KEY = realmScopedKey; // Store as secret, not env var
       (result as any).realmId = realmRegistration.realmId;
+      (result as any).realmScopedKey = realmScopedKey; // Pass to packager
 
       // STATE 2: Deploy to Platform (if deployment is requested)
       if (input.deployTarget && input.deployTarget !== 'docker') {
@@ -173,9 +180,12 @@ export class Generator {
         realmId,
         realmRegistered,
         deploymentStarted,
-        error: error.message
+        error: error.message,
+        stack: error.stack
       });
       emit(0, 'Rolling back due to error');
+
+      const compensationErrors: string[] = [];
 
       // Rollback Realm registration if it succeeded
       if (realmRegistered && realmId) {
@@ -184,46 +194,126 @@ export class Generator {
           await this.compensateRealmRegistration(realmId);
           logger.info('generate:realm-compensated', { realmId });
         } catch (compensateError: any) {
-          // Compensation failed - log for manual intervention
+          compensationErrors.push(`Realm cleanup failed: ${compensateError.message}`);
           logger.error('generate:compensation-failed', {
             realmId,
             originalError: error.message,
             compensationError: compensateError.message
           });
-          // TODO: Push to dead-letter queue for ops team
         }
       }
 
-      // Re-throw original error
+      // Rollback deployment if it was started
+      if (deploymentStarted) {
+        logger.warn('generate:compensating-deployment', { toolId, realmId });
+        try {
+          // Note: Actual deployment rollback would go here
+          // For now, we just log that it needs manual cleanup
+          logger.info('generate:deployment-rollback-needed', { toolId, realmId });
+        } catch (deployError: any) {
+          compensationErrors.push(`Deployment cleanup failed: ${deployError.message}`);
+        }
+      }
+
+      // If compensation failed, wrap error with compensation info
+      if (compensationErrors.length > 0) {
+        const enhancedError = new GeneratorError(
+          `${error.message}\n\nCompensation errors:\n${compensationErrors.join('\n')}\n\nManual cleanup may be required for realm: ${realmId}`
+        );
+        enhancedError.cause = error;
+        throw enhancedError;
+      }
+
+      // Re-throw original error if compensation succeeded
       throw error;
+    }
+  }
+
+  /**
+   * Get realm-scoped API key from UBL delegation endpoint
+   */
+  private async getRealmScopedKey(realmId: string): Promise<string> {
+    const ublAntennaUrl = process.env.UBL_ANTENNA_URL || 'http://localhost:3000';
+    const masterKey = process.env.UBL_MASTER_API_KEY || process.env.UBL_API_KEY;
+    
+    if (!masterKey) {
+      logger.warn('generate:no-master-key', { realmId });
+      // Fallback: return placeholder (will need manual configuration)
+      return 'PLACEHOLDER_REALM_SCOPED_KEY';
+    }
+    
+    try {
+      const response = await fetch(`${ublAntennaUrl}/auth/delegate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${masterKey}`,
+        },
+        body: JSON.stringify({ realmId }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        logger.warn('generate:delegation-failed', { realmId, error });
+        throw new Error(`Failed to get realm-scoped key: ${error || response.statusText}`);
+      }
+      
+      const data = await response.json();
+      logger.info('generate:realm-scoped-key-obtained', { realmId });
+      return data.token;
+    } catch (error: any) {
+      logger.error('generate:delegation-error', { realmId, error: error.message });
+      // Don't fail generation if delegation fails - user can configure manually
+      return 'PLACEHOLDER_REALM_SCOPED_KEY';
     }
   }
 
   /**
    * Compensate Realm registration by deleting the Realm from UBL
    * Called when deployment fails after Realm was created
+   * 
+   * This ensures no "orphaned" realms are left if generation fails
    */
   private async compensateRealmRegistration(realmId: string): Promise<void> {
     const ublAntennaUrl = process.env.UBL_ANTENNA_URL || 'http://localhost:3000';
+    const masterKey = process.env.UBL_MASTER_API_KEY || process.env.UBL_API_KEY;
+
+    if (!masterKey) {
+      logger.warn('generate:no-master-key-for-cleanup', { realmId });
+      throw new Error('Master API key not configured - cannot cleanup realm');
+    }
 
     try {
+      // Attempt to delete the realm
       const response = await fetch(`${ublAntennaUrl}/realms/${realmId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          ...(process.env.UBL_API_KEY && {
-            'Authorization': `Bearer ${process.env.UBL_API_KEY}`
-          })
-        }
+          'Authorization': `Bearer ${masterKey}`
+        },
+        // Add timeout to prevent hanging
+        signal: AbortSignal.timeout(10000) // 10s timeout
       });
 
       if (!response.ok) {
-        const error = await response.text();
+        // 404 is acceptable - realm might not exist or already deleted
+        if (response.status === 404) {
+          logger.info('generate:realm-already-deleted', { realmId });
+          return;
+        }
+        
+        const error = await response.text().catch(() => response.statusText);
         throw new Error(`Failed to delete Realm ${realmId}: ${error || response.statusText}`);
       }
 
       logger.info('generate:realm-deleted', { realmId });
     } catch (error: any) {
+      // Don't throw if it's a timeout or network error - log for manual cleanup
+      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+        logger.error('generate:realm-deletion-timeout', { realmId });
+        throw new Error(`Timeout deleting realm ${realmId} - manual cleanup required`);
+      }
+      
       logger.error('generate:realm-deletion-failed', { realmId, error: error.message });
       throw error;
     }

@@ -18,7 +18,8 @@ export const masterFrontendTemplate = `import React, { useState, useEffect, useC
 import Layout from './Layout';
 import { ledger } from './ledger-client';
 import ReactMarkdown from 'react-markdown';
-import { Send, Search, Plus, Filter, X, ChevronDown } from 'lucide-react';
+import { Send, Search, Plus, Filter, X, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import AutoForm from './components/AutoForm';
 import DataGrid from './components/DataGrid';
 import { DashboardWidget } from './components/DashboardWidgets';
@@ -189,37 +190,63 @@ function ChatInterface({ onMessage }: { onMessage: (text: string) => void }) {
 }
 
 /**
- * Componente de Affordances (Botões de Ação) - Tailwind
+ * Componente de Affordances (Botões de Ação) - Tailwind com Motion
  */
 function Affordances({ affordances, onAffordanceClick }: { affordances: any[]; onAffordanceClick: (aff: any) => void }) {
   if (!affordances || affordances.length === 0) return null;
 
   return (
-    <div className="flex gap-2 flex-wrap mt-4 animate-fade-in">
-      {affordances.map((aff, i) => (
-        <button
-          key={i}
-          onClick={() => onAffordanceClick(aff)}
-          className={\`btn \${aff.style === 'primary' ? 'btn-primary' : 'btn-secondary'} text-sm flex items-center gap-2\`}
-        >
-          {aff.icon === 'search' && <Search size={14} />}
-          {aff.icon === 'plus' && <Plus size={14} />}
-          {aff.label || aff.action}
-        </button>
-      ))}
-    </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex gap-2 flex-wrap mt-4"
+    >
+      <AnimatePresence>
+        {affordances.map((aff, i) => (
+          <motion.button
+            key={i}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ delay: i * 0.05 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onAffordanceClick(aff)}
+            className={\`btn \${aff.style === 'primary' ? 'btn-primary' : 'btn-secondary'} text-sm flex items-center gap-2\`}
+          >
+            {aff.icon === 'search' && <Search size={14} />}
+            {aff.icon === 'plus' && <Plus size={14} />}
+            {aff.label || aff.action}
+          </motion.button>
+        ))}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
 /**
- * Componente de Loading - Tailwind
+ * Componente de Loading - Tailwind com Motion
  */
 function LoadingSpinner() {
   return (
-    <div className="flex items-center gap-2 p-4 text-muted justify-center">
-      <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      <span className="text-sm animate-pulse">Processando...</span>
-    </div>
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-2 p-4 text-muted justify-center"
+    >
+      <motion.div 
+        className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+      />
+      <motion.span 
+        className="text-sm"
+        animate={{ opacity: [0.5, 1, 0.5] }}
+        transition={{ duration: 1.5, repeat: Infinity }}
+      >
+        Processando...
+      </motion.span>
+    </motion.div>
   );
 }
 
@@ -286,12 +313,24 @@ export default function App() {
           {{#each features}}
           {{#if this.enabled}}
           {/* FEATURE:{{this.id}} START */}
-          <section className="card hover:shadow-lg transition-shadow duration-300">
+          <motion.section 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            whileHover={{ y: -2 }}
+            className="card hover:shadow-lg transition-shadow duration-300"
+          >
             <div className="flex justify-between items-center mb-4 border-b border-border pb-2">
               <h2 className="text-lg font-bold text-primary flex items-center gap-2">
                 {{this.name}}
               </h2>
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">Active</span>
+              <motion.span 
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
+              >
+                Active
+              </motion.span>
             </div>
             
             {{#if this.analytics}}
@@ -336,9 +375,13 @@ export default function App() {
                       <details className="group">
                         <summary className="flex justify-between items-center font-medium cursor-pointer list-none text-primary hover:text-primary-dark">
                           <span>{{this.label}}</span>
-                          <span className="transition group-open:rotate-180">
+                          <motion.span 
+                            className="transition group-open:rotate-180"
+                            animate={{ rotate: 0 }}
+                            transition={{ duration: 0.2 }}
+                          >
                             <ChevronDown size={16} />
-                          </span>
+                          </motion.span>
                         </summary>
                         <div className="mt-4 text-sm">
                           <AutoForm 
@@ -358,7 +401,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-          </section>
+          </motion.section>
           {/* FEATURE:{{this.id}} END */}
           {{/if}}
           {{/each}}
@@ -374,31 +417,47 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-              {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-muted opacity-60">
-                  <div className="text-4xl mb-2">👋</div>
-                  <p>Como posso ajudar com {{templateName}} hoje?</p>
-                </div>
-              ) : (
-                messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={\`p-3 rounded-lg max-w-[90%] text-sm \${
-                      msg.role === 'user' 
-                        ? 'bg-primary text-white ml-auto rounded-br-none' 
-                        : 'bg-background border border-border mr-auto rounded-bl-none'
-                    }\`}
+              <AnimatePresence mode="popLayout">
+                {messages.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="h-full flex flex-col items-center justify-center text-center text-muted opacity-60"
                   >
-                    {msg.role === 'assistant' ? (
-                      <ReactMarkdown className="prose prose-sm prose-invert max-w-none">
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
-                ))
-              )}
+                    <motion.div 
+                      className="text-4xl mb-2"
+                      animate={{ rotate: [0, 10, -10, 0] }}
+                      transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                    >
+                      👋
+                    </motion.div>
+                    <p>Como posso ajudar com {{templateName}} hoje?</p>
+                  </motion.div>
+                ) : (
+                  messages.map((msg, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className={\`p-3 rounded-lg max-w-[90%] text-sm \${
+                        msg.role === 'user' 
+                          ? 'bg-primary text-white ml-auto rounded-br-none' 
+                          : 'bg-background border border-border mr-auto rounded-bl-none'
+                      }\`}
+                    >
+                      {msg.role === 'assistant' ? (
+                        <ReactMarkdown className="prose prose-sm prose-invert max-w-none">
+                          {msg.content}
+                        </ReactMarkdown>
+                      ) : (
+                        msg.content
+                      )}
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
               {chatLoading && <LoadingSpinner />}
               <div ref={messagesEndRef} />
             </div>

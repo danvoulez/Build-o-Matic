@@ -56,9 +56,9 @@ export function toolsRouter() {
         name,
         status: 'generating',
         configuration,
-        deployment_type: null,
-        deployment_url: null,
-        subscription_id: null,
+        deployment_type: undefined,
+        deployment_url: undefined,
+        subscription_id: undefined,
         billing_status: 'trial',
         realm_id: realm_id || null, // UBL Realm ID
       });
