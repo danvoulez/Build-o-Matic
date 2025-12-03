@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "target": "es2020",
+    "moduleResolution": "node",
+    "strict": true
+  },
+  "include": ["src"]
+}

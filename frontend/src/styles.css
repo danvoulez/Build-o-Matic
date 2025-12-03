@@ -1,0 +1,21 @@
+:root {
+  --bg: #0b0f19;
+  --fg: #ffffff;
+}
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+  background: #f7f7fb;
+  color: #222;
+}
+.tool-card button {
+  background: #3b82f6;
+  color: white;
+  border: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tool-card button:hover {
+  background: #2563eb;
+}

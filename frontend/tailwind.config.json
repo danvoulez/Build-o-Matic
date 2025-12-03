@@ -1,0 +1,11 @@
+{
+  "content": ["./index.html", "./src/**/*.{ts,tsx}"],
+  "theme": {
+    "extend": {
+      "colors": {
+        "primary": "#3b82f6"
+      }
+    }
+  },
+  "plugins": []
+}

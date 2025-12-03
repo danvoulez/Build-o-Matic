@@ -1,0 +1,25 @@
+{
+  "name": "build-o-matic-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "build": "tsc -p ./tsconfig.json",
+    "dev": "tsx watch index.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "body-parser": "^1.20.2",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
