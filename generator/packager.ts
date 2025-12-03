@@ -414,7 +414,6 @@ export const ledger = createLedgerClient({
 });
 `;
   }
-  }
 
   private dependenciesObject(deps: string[] = []) {
     const out: Record<string, string> = {};
