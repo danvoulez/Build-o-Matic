@@ -26,7 +26,7 @@ export class LedgerClient {
   }
 
   async proposeIntent(request: IntentRequest) {
-    const response = await fetch(`${this.baseUrl}/intend`, {
+    const response = await fetch(`${this.baseUrl}/intent`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

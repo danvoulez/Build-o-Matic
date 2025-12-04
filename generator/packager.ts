@@ -388,7 +388,7 @@ class LedgerClient {
    * Execute intent
    */
   async intend(intent: string, payload?: Record<string, any>): Promise<IntentResponse> {
-    return this.request<IntentResponse>('/intend', {
+    return this.request<IntentResponse>('/intent', {
       method: 'POST',
       body: JSON.stringify({
         intent,
